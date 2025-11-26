@@ -1,0 +1,33 @@
+{% extends 'todos/base.html' %}
+
+{% block content %}
+<h1 class="mb-3">My TODO List</h1>
+
+<a href="{% url 'todo_create' %}" class="btn btn-primary mb-3">Create New TODO</a>
+
+<ul class="list-group">
+  {% for todo in todos %}
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+      <div>
+        {% if todo.is_completed %}
+          <s>{{ todo.title }}</s>
+        {% else %}
+          {{ todo.title }}
+        {% endif %}
+        {% if todo.due_date %}
+          <small class="text-muted"> - Due: {{ todo.due_date }}</small>
+        {% endif %}
+      </div>
+      <div>
+        <a href="{% url 'todo_edit' todo.pk %}" class="btn btn-sm btn-warning">Edit</a>
+        <a href="{% url 'todo_delete' todo.pk %}" class="btn btn-sm btn-danger">Delete</a>
+        {% if not todo.is_completed %}
+          <a href="{% url 'todo_resolve' todo.pk %}" class="btn btn-sm btn-success">Mark Done</a>
+        {% endif %}
+      </div>
+    </li>
+  {% empty %}
+    <li class="list-group-item">No TODOs yet.</li>
+  {% endfor %}
+</ul>
+{% endblock %}
