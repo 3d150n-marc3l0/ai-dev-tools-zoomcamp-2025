@@ -2,12 +2,14 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/app.js';
 import { sessionStore } from '../src/sessionStore.js';
-import { supabase } from '../src/lib/supabase.js';
 
 describe('REST API Integration Tests', () => {
-  beforeEach(() => {
-    // Reset DB state
-    (supabase as any)._reset();
+  beforeEach(async () => {
+    // Clear all sessions before each test
+    const sessions = await sessionStore.getAllSessions();
+    for (const session of sessions) {
+      await sessionStore.deleteSession(session.code);
+    }
   });
 
   describe('GET /health', () => {
@@ -52,9 +54,7 @@ describe('REST API Integration Tests', () => {
         .post('/api/sessions')
         .send({});
 
-      expect(response.body.id).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-      );
+      expect(response.body.id).toMatch(/^session_\d+$/);
       expect(response.body.code.length).toBe(6);
     });
   });

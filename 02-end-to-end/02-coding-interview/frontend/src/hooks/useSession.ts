@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { createSessionCode, DEFAULT_CODE_TEMPLATES } from '@/lib/session';
 import { useToast } from '@/hooks/use-toast';
 
@@ -9,9 +8,17 @@ interface Session {
   title: string;
   language: string;
   content: string;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
 }
+
+const getApiUrl = () => {
+  let serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+  if (!serverUrl.startsWith('http')) {
+    serverUrl = `https://${serverUrl}`;
+  }
+  return serverUrl;
+};
 
 export const useSession = (sessionCode?: string) => {
   const [session, setSession] = useState<Session | null>(null);
@@ -19,9 +26,8 @@ export const useSession = (sessionCode?: string) => {
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const lastUpdateRef = useRef<string>('');
 
-  // Fetch or create session
+  // Fetch session from backend API
   useEffect(() => {
     const fetchSession = async () => {
       if (!sessionCode) {
@@ -30,22 +36,20 @@ export const useSession = (sessionCode?: string) => {
       }
 
       try {
-        const { data, error: fetchError } = await supabase
-          .from('interview_sessions')
-          .select('*')
-          .eq('code', sessionCode)
-          .single();
+        const response = await fetch(`${getApiUrl()}/api/sessions/${sessionCode}`);
 
-        if (fetchError) {
-          if (fetchError.code === 'PGRST116') {
+        if (!response.ok) {
+          if (response.status === 404) {
             setError('Session not found');
           } else {
-            throw fetchError;
+            throw new Error('Failed to fetch session');
           }
-        } else {
-          setSession(data);
-          lastUpdateRef.current = data.content;
+          setLoading(false);
+          return;
         }
+
+        const data = await response.json();
+        setSession(data);
       } catch (err) {
         console.error('Error fetching session:', err);
         setError('Failed to load session');
@@ -57,55 +61,30 @@ export const useSession = (sessionCode?: string) => {
     fetchSession();
   }, [sessionCode]);
 
-  // Subscribe to realtime updates
-  useEffect(() => {
-    if (!session?.id) return;
-
-    const channel = supabase
-      .channel(`session-${session.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'interview_sessions',
-          filter: `id=eq.${session.id}`,
-        },
-        (payload) => {
-          const newData = payload.new as Session;
-          // Only update if content differs from what we last sent
-          if (newData.content !== lastUpdateRef.current) {
-            setSession(newData);
-            lastUpdateRef.current = newData.content;
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [session?.id]);
-
-  // Create new session
+  // Create new session via backend API
   const createSession = useCallback(async (language: string = 'javascript', title: string = 'Untitled Session') => {
     try {
-      const code = createSessionCode();
-      const defaultContent = DEFAULT_CODE_TEMPLATES[language] || DEFAULT_CODE_TEMPLATES.javascript;
+      const username = localStorage.getItem('code_connect_username') || 'Anonymous';
+      const email = localStorage.getItem('code_connect_email') || '';
 
-      const { data, error: createError } = await supabase
-        .from('interview_sessions')
-        .insert({
-          code,
+      const response = await fetch(`${getApiUrl()}/api/sessions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           language,
-          content: defaultContent,
           title,
-        })
-        .select()
-        .single();
+          username,
+          email,
+        }),
+      });
 
-      if (createError) throw createError;
+      if (!response.ok) {
+        throw new Error('Failed to create session');
+      }
 
+      const data = await response.json();
       return data;
     } catch (err) {
       console.error('Error creating session:', err);
@@ -121,70 +100,102 @@ export const useSession = (sessionCode?: string) => {
   // Update session content with debounce
   const updateContent = useCallback(
     async (content: string) => {
-      if (!session?.id) return;
+      if (!session?.code) return;
 
-      lastUpdateRef.current = content;
+      // Optimistic update
       setSession((prev) => prev ? { ...prev, content } : null);
 
-      // Debounce database updates
+      // Debounce API call
       if (updateTimeoutRef.current) {
         clearTimeout(updateTimeoutRef.current);
       }
 
       updateTimeoutRef.current = setTimeout(async () => {
         try {
-          await supabase
-            .from('interview_sessions')
-            .update({ content })
-            .eq('id', session.id);
+          const response = await fetch(`${getApiUrl()}/api/sessions/${session.code}/content`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ content }),
+          });
+
+          if (!response.ok) {
+            throw new Error('Failed to update content');
+          }
         } catch (err) {
           console.error('Error updating content:', err);
+          toast({
+            title: 'Error',
+            description: 'Failed to save changes',
+            variant: 'destructive',
+          });
         }
       }, 300);
     },
-    [session?.id]
+    [session?.code, toast]
   );
 
   // Update session language
   const updateLanguage = useCallback(
     async (language: string) => {
-      if (!session?.id) return;
+      if (!session?.code) return;
 
       try {
-        const { error: updateError } = await supabase
-          .from('interview_sessions')
-          .update({ language })
-          .eq('id', session.id);
+        const response = await fetch(`${getApiUrl()}/api/sessions/${session.code}/language`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ language }),
+        });
 
-        if (updateError) throw updateError;
+        if (!response.ok) {
+          throw new Error('Failed to update language');
+        }
 
         setSession((prev) => prev ? { ...prev, language } : null);
       } catch (err) {
         console.error('Error updating language:', err);
+        toast({
+          title: 'Error',
+          description: 'Failed to update language',
+          variant: 'destructive',
+        });
       }
     },
-    [session?.id]
+    [session?.code, toast]
   );
 
   // Update session title
   const updateTitle = useCallback(
     async (title: string) => {
-      if (!session?.id) return;
+      if (!session?.code) return;
 
       try {
-        const { error: updateError } = await supabase
-          .from('interview_sessions')
-          .update({ title })
-          .eq('id', session.id);
+        const response = await fetch(`${getApiUrl()}/api/sessions/${session.code}/title`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ title }),
+        });
 
-        if (updateError) throw updateError;
+        if (!response.ok) {
+          throw new Error('Failed to update title');
+        }
 
         setSession((prev) => prev ? { ...prev, title } : null);
       } catch (err) {
         console.error('Error updating title:', err);
+        toast({
+          title: 'Error',
+          description: 'Failed to update title',
+          variant: 'destructive',
+        });
       }
     },
-    [session?.id]
+    [session?.code, toast]
   );
 
   return {

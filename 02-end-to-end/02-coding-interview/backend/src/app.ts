@@ -12,7 +12,7 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: process.env.CLIENT_URL || 'http://localhost:8080',
   credentials: true,
 }));
 app.use(express.json());
@@ -123,16 +123,26 @@ app.patch('/api/sessions/:code/language', async (req: Request<{ code: string }, 
   res.json(sessionStore.toSessionData(session));
 });
 
-// Delete session
-app.delete('/api/sessions/:code', async (req: Request<{ code: string }>, res: Response) => {
+// Update session title
+app.patch('/api/sessions/:code/title', async (req: Request<{ code: string }, {}, { title: string }>, res: Response) => {
   const { code } = req.params;
-  const deleted = await sessionStore.deleteSession(code);
+  const { title } = req.body;
 
-  if (!deleted) {
+  const session = await sessionStore.updateTitle(code, title);
+
+  if (!session) {
     res.status(404).json({ error: 'Session not found' });
     return;
   }
 
+  res.json(sessionStore.toSessionData(session));
+});
+
+
+// Delete session
+app.delete('/api/sessions/:code', async (req: Request<{ code: string }>, res: Response) => {
+  const { code } = req.params;
+  await sessionStore.deleteSession(code);
   res.status(204).send();
 });
 

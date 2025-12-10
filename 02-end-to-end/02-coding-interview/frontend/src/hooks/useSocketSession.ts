@@ -61,7 +61,10 @@ export const useSocketSession = ({
   const [participants, setParticipants] = useState<Participant[]>([]);
 
   useEffect(() => {
-    const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+    let serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+    if (!serverUrl.startsWith('http')) {
+      serverUrl = `https://${serverUrl}`;
+    }
 
     const socket = io(serverUrl, {
       transports: ['websocket'],

@@ -2,30 +2,19 @@ services:
   # Backend
   - type: web
     name: code-connect-backend
-    runtime: node
-    buildCommand: cd backend && npm install && npm run build
-    startCommand: cd backend && npm start
-    envVars:
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_SERVICE_KEY
-        sync: false
+    runtime: docker
+    dockerContext: backend
+    dockerfilePath: Dockerfile
 
   # Frontend
-  - type: static
+  - type: web
     name: code-connect-frontend
-    runtime: static
-    buildCommand: cd frontend && npm install && npm run build
-    publishDir: frontend/dist
+    runtime: docker
+    dockerContext: frontend
+    dockerfilePath: Dockerfile
     envVars:
       - key: VITE_SERVER_URL
         fromService:
           type: web
           name: code-connect-backend
-          property: url
-      - key: VITE_SUPABASE_URL
-        sync: false
-      - key: VITE_SUPABASE_PROJECT_ID
-        sync: false
-      - key: VITE_SUPABASE_PUBLISHABLE_KEY
-        sync: false
+          property: host
