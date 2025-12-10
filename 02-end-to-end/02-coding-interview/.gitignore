@@ -15,6 +15,9 @@ dist-ssr
 .env.*
 !.env.example
 
+# Build artifacts
+backend/public
+
 # Testing
 coverage
 test-results

@@ -26,7 +26,8 @@ A real-time collaborative technical interview platform with live code editing, m
 - **Express.js** - HTTP server
 - **Socket.io** - WebSocket server for real-time sync
 - **TypeScript** - Type safety
-- **Supabase** - PostgreSQL database and authentication
+- **In-Memory Storage** - Session management (development mode)
+- **Swagger/OpenAPI** - Interactive API documentation
 - **Node.js** - Runtime environment
 
 ### Infrastructure
@@ -70,34 +71,18 @@ npx playwright install
 cd ..
 ```
 
-## 🗄️ Database Setup (Supabase)
-
-1. **Create a Supabase Project**: Go to [database.new](https://database.new) and create a new project.
-2. **Get Credentials**:
-   - Go to Project Settings -> API.
-   - Copy `Project URL` (`SUPABASE_URL`).
-   - Copy `service_role` secret (`SUPABASE_SERVICE_KEY`) for backend.
-   - Copy `anon` public key (`VITE_SUPABASE_PUBLISHABLE_KEY`) for frontend.
-3. **Run Migrations**:
-   - Copy the SQL from `backend/supabase/migrations/20251210040000_add_users_and_candidates.sql`.
-   - Run it in the Supabase SQL Editor to create `users`, `candidates`, and `interview_sessions` tables.
-
-## 🔧 Environment Configuration
+##  Environment Configuration
 
 ### Frontend (.env)
 ```env
-VITE_SUPABASE_URL=your_supabase_url
-VITE_SUPABASE_PUBLISHABLE_KEY=your_supabase_anon_key
-VITE_SUPABASE_PROJECT_ID=your_project_id
 VITE_SERVER_URL=http://localhost:3001
 ```
 
-### Backend (server/.env)
+### Backend (.env)
 ```env
 PORT=3001
-CLIENT_URL=http://localhost:5173
-SUPABASE_URL=your_supabase_url
-SUPABASE_SERVICE_KEY=your_service_role_key
+CLIENT_URL=http://localhost:8080
+NODE_ENV=development
 ```
 
 ## 🖥 Running the Application
@@ -149,22 +134,126 @@ The frontend will run on http://localhost:5173
 ### Production Mode
 
 ```bash
-# Build frontend
-# Build frontend
-cd frontend
+# Build everything (frontend + backend)
 npm run build
-cd ..
 
-# Build backend
+# Start backend in production mode (serves both API and frontend)
 cd backend
-npm run build
-
-# Start backend
-npm start
-
-# Serve frontend with any static server
-npx serve dist
+NODE_ENV=production npm start
 ```
+
+The backend will serve:
+- Frontend at `http://localhost:3001/`
+- API at `http://localhost:3001/api/*`
+- Swagger docs at `http://localhost:3001/api-docs`
+
+## 🚀 Deployment to Render.com
+
+### Prerequisites
+- GitHub account
+- Render.com account (free tier available)
+- Code pushed to GitHub repository
+
+### Deployment Steps
+
+#### 1. Push Your Code to GitHub
+
+```bash
+# Add all changes
+git add .
+
+# Commit changes
+git commit -m "Ready for production deployment"
+
+# Push to GitHub
+git push origin main
+```
+
+#### 2. Connect to Render.com
+
+1. Go to [Render.com](https://render.com) and sign in
+2. Click **"New +"** → **"Blueprint"**
+3. Connect your GitHub account if not already connected
+4. Select your repository: `code-connect-live`
+5. Render will automatically detect the `render.yaml` file
+
+#### 3. Configure Environment Variables (Optional)
+
+The deployment is pre-configured in `render.yaml` with:
+- `NODE_ENV=production` (automatically set)
+- `PORT=3001` (automatically set)
+
+No additional configuration needed!
+
+#### 4. Deploy
+
+1. Click **"Apply"** to create the service
+2. Render will:
+   - Install dependencies (`npm run install:all`)
+   - Build frontend → `frontend/dist/`
+   - Copy frontend to → `backend/public/`
+   - Build backend → `backend/dist/`
+   - Start server with `NODE_ENV=production`
+
+3. Wait for deployment to complete (usually 3-5 minutes)
+
+#### 5. Access Your Application
+
+Once deployed, Render will provide a URL like:
+```
+https://code-connect-live.onrender.com
+```
+
+Your application will be live with:
+- **Frontend**: `https://your-app.onrender.com/`
+- **API**: `https://your-app.onrender.com/api/*`
+- **Swagger Docs**: `https://your-app.onrender.com/api-docs`
+- **Health Check**: `https://your-app.onrender.com/health`
+
+### Deployment Architecture
+
+Render deploys a **single web service** that:
+- Serves the React frontend (static files from `backend/public/`)
+- Handles API requests (`/api/*`, `/health`, `/api-docs`)
+- Manages WebSocket connections for real-time collaboration
+- Provides SPA routing (all routes serve `index.html`)
+
+### Updating Your Deployment
+
+Render automatically redeploys when you push to GitHub:
+
+```bash
+# Make changes to your code
+git add .
+git commit -m "Update feature"
+git push origin main
+```
+
+Render will detect the push and automatically rebuild and redeploy.
+
+### Monitoring
+
+- **Logs**: View real-time logs in Render dashboard
+- **Metrics**: Monitor CPU, memory usage
+- **Health**: Check `/health` endpoint
+
+### Troubleshooting Deployment
+
+**Build Fails**
+```bash
+# Test build locally first
+npm run build
+```
+
+**Application Not Starting**
+- Check Render logs for errors
+- Verify `NODE_ENV=production` is set
+- Ensure `backend/public/` directory exists after build
+
+**WebSocket Issues**
+- Render supports WebSockets by default
+- Check CORS settings in `backend/src/app.ts`
+- Verify Socket.io connection URL in frontend
 
 ## 🧪 Testing
 
@@ -237,7 +326,20 @@ npx playwright test e2e/interview-platform.spec.ts
 - Code execution
 - Session header and sharing
 
-## 📡 API Reference
+## 📡 API Documentation
+
+### Interactive API Docs (Swagger)
+
+Access the interactive Swagger UI to explore and test all API endpoints:
+
+**Development**: `http://localhost:3001/api-docs`  
+**Production**: `https://your-app.onrender.com/api-docs`
+
+The Swagger UI provides:
+- Complete API documentation
+- Request/response schemas
+- Interactive endpoint testing
+- Example requests and responses
 
 ### REST Endpoints
 
@@ -247,8 +349,10 @@ npx playwright test e2e/interview-platform.spec.ts
 | POST | `/api/sessions` | Create new session |
 | GET | `/api/sessions` | List all sessions |
 | GET | `/api/sessions/:code` | Get session by code |
+| POST | `/api/sessions/:code/join` | Join session as candidate |
 | PATCH | `/api/sessions/:code/content` | Update session content |
 | PATCH | `/api/sessions/:code/language` | Update session language |
+| PATCH | `/api/sessions/:code/title` | Update session title |
 | DELETE | `/api/sessions/:code` | Delete session |
 
 ### WebSocket Events

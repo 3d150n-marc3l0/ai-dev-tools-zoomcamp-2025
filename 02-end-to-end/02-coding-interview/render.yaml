@@ -1,20 +1,12 @@
 services:
-  # Backend
+  # Backend (serves both API and frontend in production)
   - type: web
-    name: code-connect-backend
-    runtime: docker
-    dockerContext: backend
-    dockerfilePath: Dockerfile
-
-  # Frontend
-  - type: web
-    name: code-connect-frontend
-    runtime: docker
-    dockerContext: frontend
-    dockerfilePath: Dockerfile
+    name: code-connect-live
+    runtime: node
+    buildCommand: NODE_ENV=development npm install && cd frontend && NODE_ENV=development npm install && cd ../backend && NODE_ENV=development npm install && cd .. && npm run build
+    startCommand: cd backend && npm start
     envVars:
-      - key: VITE_SERVER_URL
-        fromService:
-          type: web
-          name: code-connect-backend
-          property: host
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
