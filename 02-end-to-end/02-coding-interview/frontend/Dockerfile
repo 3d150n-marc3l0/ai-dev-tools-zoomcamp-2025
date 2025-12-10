@@ -1,0 +1,16 @@
+# Build Stage
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+# Increase memory limit for node to avoid build crashes
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+RUN npm run build
+
+# Production Stage
+FROM nginx:alpine
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
